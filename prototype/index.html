@@ -2,40 +2,97 @@
 <meta charset="utf-8">
 <style>
 
-h1 {
-  position: absolute;
-  top: 280px;
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  font-size: 18px;
-  text-align: center;
-  width: 960px;
+.svg-container {
+    display: inline-block;
+    position: relative;
+    max-width: 500px;
+    width: 100%;
+    padding-bottom: 100%;
+    vertical-align: middle;
+    overflow: hidden;
+}
+
+.svg-content {
+    display: inline-block;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+.country {
+    opacity: 0.7;
+}
+
+circle.fill {
+    fill: #993030;
+}
+
+circle.stroke {
+    fill: white;
+    stroke: #993030;
+    stroke-width: 4;
+}
+
+text {
+   fill: white;
+   stroke: white;
+   font-size: 80pt;
+   /*filter: url(#dropshadow);*/
 }
 
 </style>
-<h1></h1>
-<script src="http://d3js.org/d3.v3.min.js"></script>
-<script src="http://d3js.org/queue.v1.min.js"></script>
-<script src="http://d3js.org/topojson.v1.min.js"></script>
+<body>
+  <div>
+    <input id="country" list="countries" value="Germany"/>
+    <datalist id="countries"></datalist>
+    <input id="fluid" type="range" value="80"/>
+  </div>
+  <div class="svg-container">
+    <svg version="1.1"
+         viewBox="0 0 500 500"
+         preserveAspectRatio="xMinYMin meet"
+         class="svg-content">
+      <circle class="stroke" r="220" cx="250" cy="250"
+              style="filter: url(#dropshadow)"></circle>
+      <circle class="fill" r="220" cx="250" cy="250"
+              clip-path="url(#clip)"></circle>
+      <clippath id="clip">
+        <rect height="440" width="440" y="100" x="30"></rect>
+      </clippath>
+      <g class="country"></g>
+      <text text-anchor="middle" x="250" y="250"
+            ></text>
+      <g id="settings">
+        <filter id="dropshadow" height="160%">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="5"></feGaussianBlur> <!-- stdDeviation is how much to blur -->
+          <feOffset dx="0" dy="3" result="offsetblur"></feOffset> <!-- how much to offset -->
+          <feMerge> 
+            <feMergeNode></feMergeNode> <!-- this contains the offset blurred image -->
+            <feMergeNode in="SourceGraphic"></feMergeNode> <!-- this contains the element that the filter is applied to -->
+          </feMerge>
+        </filter>
+      </g>
+    </svg>
+  </div>
+  <script src="http://d3js.org/d3.v3.min.js"></script>
+  <script src="http://d3js.org/queue.v1.min.js"></script>
+  <script src="http://d3js.org/topojson.v1.min.js"></script>
 <script>
+'use strict';
 
-var width = 960,
+var width = 500,
     height = 500;
 
 var projection = d3.geo.orthographic()
     .scale(248)
+    .translate([width/2, height/2])
     .clipAngle(90);
 
-var canvas = d3.select("body").append("canvas")
-    .attr("width", width)
-    .attr("height", height);
-
-var c = canvas.node().getContext("2d");
+var svg = d3.select('svg'),
+    g = svg.select('g.country');
 
 var path = d3.geo.path()
-    .projection(projection)
-    .context(c);
-
-var title = d3.select("h1");
+    .projection(projection);
 
 queue()
     .defer(d3.json, "data/world-110m.json")
@@ -43,42 +100,95 @@ queue()
     .await(ready);
 
 function ready(error, world, names) {
-  var globe = {type: "Sphere"},
-      land = topojson.feature(world, world.objects.land),
-      countries = topojson.feature(world, world.objects.countries).features,
-      borders = topojson.mesh(world, world.objects.countries, function(a, b) { return a !== b; }),
-      i = -1,
+  var countries = topojson.feature(world, world.objects.countries).features,
       n = countries.length;
 
-  countries = countries.filter(function(d) {
-    return names.some(function(n) {
-      if (d.id == n.id) return d.name = n.name;
+  countries = countries
+    .filter(function(d) {
+      return names.some(function(n) {
+        if (d.id == n.id) return d.name = n.name;
+      });
+    })
+    .sort(function(a, b) {
+      return a.name.localeCompare(b.name);
     });
-  }).sort(function(a, b) {
-    return a.name.localeCompare(b.name);
+
+  var index = {};
+  countries.forEach(function(c) {
+    index[c.name] = c;
   });
 
-  (function transition() {
-    d3.transition()
-        .duration(1250)
-        .each("start", function() {
-          title.text(countries[i = (i + 1) % n].name);
-        })
-        .tween("rotate", function() {
-          var p = d3.geo.centroid(countries[i]),
-              r = d3.interpolate(projection.rotate(), [-p[0], -p[1]]);
-          return function(t) {
-            projection.rotate(r(t));
-            c.clearRect(0, 0, width, height);
-            c.fillStyle = "#bbb", c.beginPath(), path(land), c.fill();
-            c.fillStyle = "#f00", c.beginPath(), path(countries[i]), c.fill();
-            c.strokeStyle = "#fff", c.lineWidth = .5, c.beginPath(), path(borders), c.stroke();
-            c.strokeStyle = "#000", c.lineWidth = 2, c.beginPath(), path(globe), c.stroke();
-          };
-        })
-      .transition()
-        .each("end", transition);
-  })();
+  d3.select('datalist#countries')
+    .selectAll('options')
+    .data(countries)
+    .enter()
+    .append('option')
+    .attr('value', function(d) { return d.name; });
+
+  d3.select('input#country')
+    .on('input', function() {
+      var name = this.value,
+          country = index[name];
+      if (country) {
+        show(country);
+      }
+    });
+
+  function level(value) {
+    var completion = 440 * (value/100),
+        rest       = 440 - completion;
+    return 20 + rest;
+  }
+
+  d3.select('input#fluid')
+    .on('input', function() {
+      d3.select('rect')
+        .transition()
+        .duration(2000)
+        .attr('y', level(this.value));
+      d3.select('text')
+        .transition()
+        .duration(2000)
+        .text(this.value+'%');
+    })
+
+  document.querySelector('input#fluid').dispatchEvent(new Event('input'))
+
+  function show(country) {
+
+    var p = d3.geo.centroid(country);
+
+    projection.rotate([-p[0], -p[1]]);
+
+    function scale(country) {
+      var bounds = path.bounds(country),
+          dx = bounds[1][0] - bounds[0][0],
+          dy = bounds[1][1] - bounds[0][1],
+          x  = (bounds[0][0] + bounds[1][0]) / 2,
+          y  = (bounds[0][1] + bounds[1][1]) / 2,
+          toScale = .9 / Math.max( dx/width, dy/height),
+          toTranslate = [width / 2 - toScale * x, height / 2 - toScale * y];
+
+      return "translate(" + toTranslate + ")scale(" + toScale + ")";
+    }
+
+    var paths = g
+          .attr('transform', scale(country))
+          .selectAll('path.country')
+          .data([country], function(d) { return d.name; });
+
+    paths.enter()
+      .append('path')
+      .attr('class', 'country');
+    
+    paths.attr('d', path);
+
+    paths.exit().remove();
+
+  }
+
+  show(index['Germany']);
 }
 
 </script>
+</body>
