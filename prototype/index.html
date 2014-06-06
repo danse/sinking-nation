@@ -45,6 +45,7 @@ text {
     <input id="country" list="countries" value="Germany"/>
     <datalist id="countries"></datalist>
     <input id="fluid" type="range" value="80"/>
+    <input id="color" type="color" value="#861300"/>
   </div>
   <div class="svg-container">
     <svg version="1.1"
@@ -151,7 +152,16 @@ function ready(error, world, names) {
         .text(this.value+'%');
     })
 
-  document.querySelector('input#fluid').dispatchEvent(new Event('input'))
+  d3.select('input#color')
+    .on('input', function() {
+      d3.select('circle.fill')
+        .attr('style', 'fill: '+this.value);
+      d3.select('circle.stroke')
+        .attr('style', 'stroke: '+this.value);
+    })
+
+  document.querySelector('input#fluid').dispatchEvent(new Event('input'));
+  document.querySelector('input#color').dispatchEvent(new Event('input'));
 
   function show(country) {
 
